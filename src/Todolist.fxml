@@ -25,7 +25,6 @@
                   <items>
                     <MenuItem mnemonicParsing="false" onAction="#close" text="Close" />
                         <MenuItem mnemonicParsing="false" onAction="#open" text="Open" />
-                        <MenuItem mnemonicParsing="false" onAction="#saveFile" text="Save" />
                         <MenuItem mnemonicParsing="false" onAction="#saveAs" text="Save as..." />
                   </items>
                 </Menu>

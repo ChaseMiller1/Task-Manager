@@ -49,13 +49,14 @@ public class Controller implements Initializable {
     private final Comparator<Task> taskComparator =
             Comparator.comparing(Task::getDate)
                     .thenComparing(Task::getTask);
+    private boolean isUndoRedo = false;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         // instantiate tasks and backup stack
         tasks = FXCollections.observableArrayList();
         backups = new BackupStack();
-        redo = new BackupStack();   
+        redo = new BackupStack();
 
         // Load saved backup list
         try (Scanner read = new Scanner(new File("savedList.txt"))) {
@@ -111,13 +112,34 @@ public class Controller implements Initializable {
             return row;
         });
 
+        // Attach checkbox to tasks
+        for (Task task : tasks) {
+            attachCompletionListener(task);
+        }
+        tasks.addListener((javafx.collections.ListChangeListener<Task>) change -> {
+            while (change.next()) {
+                if (change.wasAdded()) {
+                    for (Task task : change.getAddedSubList()) {
+                        attachCompletionListener(task);
+                    }
+
+                }
+            }
+            if (currentFile != null) {
+                save(currentFile);
+            }
+        });
+
         // Save on close
         Platform.runLater(() -> {
             Stage stage = (Stage) tableView.getScene().getWindow();
             stage.setOnCloseRequest(event -> {
-                save(currentFile);
                 try (PrintWriter writer = new PrintWriter("savedList.txt")) {
-                    writer.print(currentFile.toPath());
+                    if (currentFile != null) {
+                        writer.print(currentFile.toPath());
+                    } else {
+                        writer.print("");
+                    }
                 } catch (FileNotFoundException e) {
                     new Alert(Alert.AlertType.ERROR,
                             "File not found, current list couldn't be saved").showAndWait();
@@ -126,11 +148,26 @@ public class Controller implements Initializable {
         });
     }
 
+    private void attachCompletionListener(Task task) {
+        task.completedProperty().addListener(
+                (obs, oldValue, newValue) -> {
+            if (!isUndoRedo) {
+                backups.push(new Action(
+                        () -> task.completedProperty().set(oldValue),
+                        () -> task.completedProperty().set(newValue)
+                ));
+                redo.clear();
+            }
+        });
+    }
+
     @FXML
     private void undo() {
         if (!backups.isEmpty()) {
             UndoAction action = backups.pop();
+            isUndoRedo = true;
             action.undo();
+            isUndoRedo = false;
             redo.push(action);
 
             FXCollections.sort(tasks, taskComparator);
@@ -143,7 +180,9 @@ public class Controller implements Initializable {
     private void redo() {
          if (!redo.isEmpty()) {
              UndoAction action = redo.pop();
+             isUndoRedo = true;
              action.redo();
+             isUndoRedo = false;
              backups.push(action);
 
              FXCollections.sort(tasks, taskComparator);
@@ -221,9 +260,11 @@ public class Controller implements Initializable {
 
     @FXML
     private void close() {
-        Stage stage = (Stage) tableView.getScene().getWindow();
-        save(currentFile);
-        stage.close();
+        currentFile = null;
+        currentFileDisplay.clear();
+        tasks.clear();
+        backups.clear();
+        redo.clear();
     }
 
     @FXML
@@ -238,15 +279,6 @@ public class Controller implements Initializable {
     }
 
     @FXML
-    private void saveFile() {
-        if (currentFile != null) {
-            save(currentFile);
-        } else {
-            saveAs();
-        }
-    }
-
-    @FXML
     private void saveAs() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Save Task File");
@@ -254,10 +286,7 @@ public class Controller implements Initializable {
                 new FileChooser.ExtensionFilter("Text Files", "*.txt")
         );
         File file = chooser.showSaveDialog(tableView.getScene().getWindow());
-        if (file == null) {
-            currentFile = null;
-            saveFile();
-        }
+        currentFileDisplay.setText(file.getName());
     }
 
     @FXML
@@ -276,12 +305,15 @@ public class Controller implements Initializable {
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
                 if (!line.isBlank()) {
-                    String taskText;
-                    if (line.contains(" - ")) {
-                        String[] parts = line.split(" - ", 2);
-                        taskText = parts[0].trim();
+                    String[] parts = line.split(" - ", 3);
+                    if (parts.length == 3) {
                         try {
-                            tasks.add(new Task(taskText, LocalDate.parse(parts[1].trim())));
+                            String taskText = parts[0].trim();
+                            LocalDate taskDate = LocalDate.parse(parts[1].trim());
+                            boolean completed = Boolean.parseBoolean(parts[2].trim());
+                            Task task = new Task(taskText, taskDate);
+                            task.completedProperty().set(completed);
+                            tasks.add(task);
                         } catch (Exception e) {
                             errors++;
                         }
@@ -338,12 +370,14 @@ public class Controller implements Initializable {
      * Saves list
      */
     private void save(File file) {
-        try (PrintWriter pw = new PrintWriter(file)) {
-            for (Task task : tasks) {
-                pw.println(task.toString());
+        if (file != null) {
+            try (PrintWriter pw = new PrintWriter(file)) {
+                for (Task task : tasks) {
+                    pw.println(task.toString() + " - " + task.completedProperty().get());
+                }
+            } catch (IOException e) {
+                new Alert(Alert.AlertType.ERROR, "Failed to save tasks").showAndWait();
             }
-        } catch (IOException e) {
-            new Alert(Alert.AlertType.ERROR, "Failed to save tasks").showAndWait();
         }
     }
 }
