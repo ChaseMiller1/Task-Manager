@@ -6,8 +6,17 @@ import java.io.*;
 import java.time.LocalDate;
 import java.util.Scanner;
 
+/**
+ * Static methods for loading and saving files of tasks
+ */
 public class FileUtilities {
 
+    /**
+     * Loads a set of tasks by parsing its description, date, and completion
+     * @param file to load
+     * @return tasks loaded from the file
+     * @throws IOException if issue with file to load
+     */
     public static ObservableList<Task> load(File file) throws IOException {
         ObservableList<Task> tasks = FXCollections.observableArrayList();
         try (Scanner scanner = new Scanner(file)) {
@@ -41,6 +50,12 @@ public class FileUtilities {
         return tasks;
     }
 
+    /**
+     * Saved a list of tasks to a file
+     * @param file to save to
+     * @param tasks to save to the file
+     * @throws IOException if issue with file to save to
+     */
     public static void save(File file, ObservableList<Task> tasks) throws IOException {
         if (file != null) {
             try (PrintWriter pw = new PrintWriter(file)) {

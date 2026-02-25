@@ -1,28 +1,31 @@
 import java.util.EmptyStackException;
 
 /**
- * Stores old lists
+ * Stores old actions for undoing / redoing actions
  * Stack using a linked-list, allowing for O(1) popping and pushing
+ * No size tracked, because we only care if the stack is empty or not
  */
 public class BackupStack {
     private static class Node {
         UndoAction action;
         Node next;
 
+        /**
+         * 1-param constructor
+         * @param action to store on node
+         */
         Node(UndoAction action) {
             this.action = action;
         }
     }
 
     private Node top;
-    private int size;
 
     /**
      * non-param constructor
      */
     public BackupStack() {
         this.top = null;
-        this.size = 0;
     }
 
     /**
@@ -33,7 +36,6 @@ public class BackupStack {
         Node node = new Node(action);
         node.next = top;
         top = node;
-        size++;
     }
 
     /**
@@ -46,7 +48,6 @@ public class BackupStack {
         }
         UndoAction action = top.action;
         top = top.next;
-        size--;
         return action;
     }
 
@@ -62,12 +63,5 @@ public class BackupStack {
      */
     public boolean isEmpty() {
         return top == null;
-    }
-
-    /**
-     * Returns the number of snapshots stored.
-     */
-    public int size() {
-        return size;
     }
 }

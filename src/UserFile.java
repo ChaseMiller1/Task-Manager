@@ -4,10 +4,18 @@ import java.io.PrintWriter;
 import java.io.IOException;
 import java.util.Scanner;
 
+/**
+ * Static methods for keeping track of the last file the user
+ * opened, so it can be opened up when the app re-launches
+ */
 public class UserFile {
 
     private static final String FILE = "savedList.txt";
 
+    /**
+     * Saves the file being used when app is closed
+     * @param file to save
+     */
     public static void saveLastFile(File file) {
         try (PrintWriter writer = new PrintWriter(FILE)) {
             if (file != null) {
@@ -21,6 +29,11 @@ public class UserFile {
         }
     }
 
+    /**
+     * Loads saved file when
+     * @return file to open
+     * @throws IOException if issue with backup file
+     */
     public static File loadLastFile() throws IOException {
         File savedFile = new File(FILE);
         if (savedFile.exists()) {

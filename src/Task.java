@@ -22,26 +22,51 @@ public class Task {
         completed = new SimpleBooleanProperty(false);
     }
 
+    /**
+     * Get task description
+     * @return task description
+     */
     public String getTask() {
         return task;
     }
 
+    /**
+     * Set task description
+     * @param task new description
+     */
     public void setTask(String task) {
         this.task = task;
     }
 
+    /**
+     * Get task due date
+     * @return date due
+     */
     public LocalDate getDate() {
         return date;
     }
 
+    /**
+     * Set task due date
+     * @param date new date
+     */
     public void setDate(LocalDate date) {
         this.date = date;
     }
 
+    /**
+     * Get task completion value
+     * Controls checkboxes when switching boolean values
+     * @return completed value
+     */
     public BooleanProperty completedProperty() {
         return completed;
     }
 
+    /**
+     * Serialize task for saving to a text file
+     * @return serialized task
+     */
     public String serialize() {
         return task + " - " + date + " - " + completed.get();
     }

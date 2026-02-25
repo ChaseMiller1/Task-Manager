@@ -164,12 +164,13 @@ public class Controller implements Initializable {
         ObservableList<Task> removedTasks = FXCollections.observableArrayList(
                 tasks.filtered(task -> task.completedProperty().get())
         );
-
         if (!removedTasks.isEmpty()) {
+            // Backup all checked items
             undoManager.push(new Action(
                     () -> tasks.addAll(removedTasks),
                     () -> tasks.removeAll(removedTasks)
             ));
+            // Clear checked tasks
             tasks.removeAll(removedTasks);
             save();
         }
@@ -195,10 +196,12 @@ public class Controller implements Initializable {
     private void add() {
         if (date.getValue() != null) {
             Task newTask = new Task(taskDescription.getText(), date.getValue());
+            // Backup unadding task
             undoManager.push(new Action(
                     () -> tasks.remove(newTask),
                     () -> tasks.add(newTask)
             ));
+            // Add task
             tasks.add(newTask);
             refresh();
         } else {
