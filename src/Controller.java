@@ -15,14 +15,11 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.URL;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.ResourceBundle;
-import java.util.Scanner;
 
 /**
  * Controls the FXML of the task manager
@@ -43,31 +40,27 @@ public class Controller implements Initializable {
     private DatePicker date;
 
     private ObservableList<Task> tasks;
-    private BackupStack backups;
-    private BackupStack redo;
+    private UndoManager undoManager;
     private File currentFile;
     private final Comparator<Task> taskComparator =
             Comparator.comparing(Task::getDate)
                     .thenComparing(Task::getTask);
-    private boolean isUndoRedo = false;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         // instantiate tasks and backup stack
         tasks = FXCollections.observableArrayList();
-        backups = new BackupStack();
-        redo = new BackupStack();
+        undoManager = new UndoManager();
 
         // Load saved backup list
-        try (Scanner read = new Scanner(new File("savedList.txt"))) {
-            if (read.hasNextLine()) {
-                currentFile = new File(read.nextLine());
+        try {
+            currentFile = UserFile.loadLastFile();
+            if (currentFile != null) {
                 openFile(currentFile);
-            } else {
-                currentFile = null;
             }
         } catch (IOException e) {
-            new Alert(Alert.AlertType.ERROR, "File not found, list couldn't be retrieved").showAndWait();
+            new Alert(Alert.AlertType.ERROR,
+                    "File not found, list couldn't be retrieved").showAndWait();
         }
 
         // Set list to tableview
@@ -125,24 +118,17 @@ public class Controller implements Initializable {
 
                 }
             }
-            if (currentFile != null) {
-                save(currentFile);
-            }
+            save();
         });
 
         // Save on close
         Platform.runLater(() -> {
             Stage stage = (Stage) tableView.getScene().getWindow();
             stage.setOnCloseRequest(event -> {
-                try (PrintWriter writer = new PrintWriter("savedList.txt")) {
-                    if (currentFile != null) {
-                        writer.print(currentFile.toPath());
-                    } else {
-                        writer.print("");
-                    }
-                } catch (FileNotFoundException e) {
-                    new Alert(Alert.AlertType.ERROR,
-                            "File not found, current list couldn't be saved").showAndWait();
+                try {
+                    UserFile.saveLastFile(currentFile);
+                } catch (RuntimeException e) {
+                    new Alert(Alert.AlertType.ERROR, "Error saving file").showAndWait();
                 }
             });
         });
@@ -151,66 +137,42 @@ public class Controller implements Initializable {
     private void attachCompletionListener(Task task) {
         task.completedProperty().addListener(
                 (obs, oldValue, newValue) -> {
-            if (!isUndoRedo) {
-                backups.push(new Action(
-                        () -> task.completedProperty().set(oldValue),
-                        () -> task.completedProperty().set(newValue)
-                ));
-                redo.clear();
-            }
+                    if (!undoManager.isPerforming()) {
+                        undoManager.push(new Action(
+                                () -> task.completedProperty().set(oldValue),
+                                () -> task.completedProperty().set(newValue)
+                        ));
+                    }
+                    save();
         });
     }
 
     @FXML
     private void undo() {
-        if (!backups.isEmpty()) {
-            UndoAction action = backups.pop();
-            isUndoRedo = true;
-            action.undo();
-            isUndoRedo = false;
-            redo.push(action);
-
-            FXCollections.sort(tasks, taskComparator);
-            tableView.refresh();
-            save(currentFile);
-        }
+        undoManager.undo();
+        refresh();
     }
 
     @FXML
     private void redo() {
-         if (!redo.isEmpty()) {
-             UndoAction action = redo.pop();
-             isUndoRedo = true;
-             action.redo();
-             isUndoRedo = false;
-             backups.push(action);
-
-             FXCollections.sort(tasks, taskComparator);
-             tableView.refresh();
-             save(currentFile);
-         }
+        undoManager.redo();
+        refresh();
     }
 
     @FXML
     private void clearChecked() {
-        // Keep track of checked tasks that are removed
-        ObservableList<Task> removedTasks = FXCollections.observableArrayList();
-        tasks.removeIf(task -> {
-            if (task.completedProperty().getValue()) {
-                removedTasks.add(task);
-                return true;
-            }
-            return false;
-        });
+        ObservableList<Task> removedTasks = FXCollections.observableArrayList(
+                tasks.filtered(task -> task.completedProperty().get())
+        );
 
-        // Push undo action to restore removed tasks
-        backups.push(new Action(
-                () -> tasks.addAll(removedTasks),
-                () -> tasks.clear()
-        ));
-        redo.clear();
-        tableView.refresh();
-        save(currentFile);
+        if (!removedTasks.isEmpty()) {
+            undoManager.push(new Action(
+                    () -> tasks.addAll(removedTasks),
+                    () -> tasks.removeAll(removedTasks)
+            ));
+            tasks.removeAll(removedTasks);
+            save();
+        }
     }
 
     @FXML
@@ -218,15 +180,14 @@ public class Controller implements Initializable {
         if (!tasks.isEmpty()) {
             // Backup the entire list
             ObservableList<Task> removedTasks = FXCollections.observableArrayList(tasks);
-            backups.push(new Action(
+            undoManager.push(new Action(
                     () -> tasks.addAll(removedTasks),
                     () -> tasks.removeAll(removedTasks)
             ));
-            redo.clear();
 
             // Clear list
             tasks.clear();
-            save(currentFile);
+            save();
         }
     }
 
@@ -234,14 +195,12 @@ public class Controller implements Initializable {
     private void add() {
         if (date.getValue() != null) {
             Task newTask = new Task(taskDescription.getText(), date.getValue());
-            backups.push(new Action(
+            undoManager.push(new Action(
                     () -> tasks.remove(newTask),
                     () -> tasks.add(newTask)
             ));
-            redo.clear();
             tasks.add(newTask);
-            FXCollections.sort(tasks, taskComparator);
-            save(currentFile);
+            refresh();
         } else {
             new Alert(Alert.AlertType.ERROR, "Must have a date").showAndWait();
         }
@@ -263,16 +222,13 @@ public class Controller implements Initializable {
         currentFile = null;
         currentFileDisplay.clear();
         tasks.clear();
-        backups.clear();
-        redo.clear();
+        undoManager.clear();
     }
 
     @FXML
     private void open() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Open Task File");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
-        File file = chooser.showOpenDialog(tableView.getScene().getWindow());
+        File file = createTextFileChooser("Open Task File")
+                .showOpenDialog(tableView.getScene().getWindow());
         if (file != null) {
             openFile(file);
         }
@@ -280,13 +236,13 @@ public class Controller implements Initializable {
 
     @FXML
     private void saveAs() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Save Task File");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Text Files", "*.txt")
-        );
-        File file = chooser.showSaveDialog(tableView.getScene().getWindow());
-        currentFileDisplay.setText(file.getName());
+        File file = createTextFileChooser("Save Task File")
+                .showSaveDialog(tableView.getScene().getWindow());
+        if (file != null) {
+            currentFile = file;
+            currentFileDisplay.setText(file.getName());
+            save();
+        }
     }
 
     @FXML
@@ -295,42 +251,52 @@ public class Controller implements Initializable {
     }
 
     /**
+     * Get file chooser for text files only
+     * @param title of file action
+     * @return chooser for text files
+     */
+    private FileChooser createTextFileChooser(String title) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(title);
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Text Files", "*.txt")
+        );
+        return chooser;
+    }
+
+    /**
      * Opens a txt file to table view
      * @param file to open
      */
     private void openFile(File file) {
         tasks.clear();
-        try (Scanner scanner = new Scanner(file)) {
-            int errors = 0;
-            while (scanner.hasNextLine()) {
-                String line = scanner.nextLine();
-                if (!line.isBlank()) {
-                    String[] parts = line.split(" - ", 3);
-                    if (parts.length == 3) {
-                        try {
-                            String taskText = parts[0].trim();
-                            LocalDate taskDate = LocalDate.parse(parts[1].trim());
-                            boolean completed = Boolean.parseBoolean(parts[2].trim());
-                            Task task = new Task(taskText, taskDate);
-                            task.completedProperty().set(completed);
-                            tasks.add(task);
-                        } catch (Exception e) {
-                            errors++;
-                        }
-                    } else {
-                        errors++;
-                    }
-                }
-            }
-            if (errors == 1) {
-                new Alert(Alert.AlertType.ERROR, "Parsing issue, " + errors + " task skipped").showAndWait();
-            } else if (errors > 1) {
-                new Alert(Alert.AlertType.ERROR, "Parsing issue, " + errors + " tasks skipped").showAndWait();
-            }
+        try {
+            tasks.addAll(FileUtilities.load(file));
             currentFile = file;
             currentFileDisplay.setText(file.getName());
-        } catch (FileNotFoundException e) {
-            new Alert(Alert.AlertType.ERROR, "File not found, list couldn't be saved").showAndWait();
+        } catch (IOException e) {
+            new Alert(Alert.AlertType.ERROR, e.getMessage()).showAndWait();
+        }
+    }
+
+    /**
+     * Refresh table view
+     */
+    private void save() {
+        if (currentFile != null) {
+            save(currentFile);
+        }
+    }
+
+    /**
+     * Saves list
+     * @param file to save
+     */
+    private void save(File file) {
+        try {
+            FileUtilities.save(file, tasks);
+        } catch (IOException e) {
+            new Alert(Alert.AlertType.ERROR, "Failed to save tasks").showAndWait();
         }
     }
 
@@ -345,19 +311,14 @@ public class Controller implements Initializable {
             TaskController controller = loader.getController();
             controller.setTask(task);
             controller.setTasks(tasks);
-            controller.setBackups(backups);
-            controller.setRedo(redo);
+            controller.setUndoManager(undoManager);
 
             Stage stage = new Stage();
             stage.setTitle(task.toString());
             stage.setScene(new Scene(root, 300, 200));
             controller.setStage(stage);
 
-            stage.setOnHidden(e -> {
-                FXCollections.sort(tasks, taskComparator);
-                tableView.refresh();
-                save(currentFile);
-            });
+            stage.setOnHidden(e -> refresh());
 
             stage.show();
 
@@ -366,18 +327,9 @@ public class Controller implements Initializable {
         }
     }
 
-    /**
-     * Saves list
-     */
-    private void save(File file) {
-        if (file != null) {
-            try (PrintWriter pw = new PrintWriter(file)) {
-                for (Task task : tasks) {
-                    pw.println(task.toString() + " - " + task.completedProperty().get());
-                }
-            } catch (IOException e) {
-                new Alert(Alert.AlertType.ERROR, "Failed to save tasks").showAndWait();
-            }
-        }
+    private void refresh() {
+        FXCollections.sort(tasks, taskComparator);
+        tableView.refresh();
+        save();
     }
 }

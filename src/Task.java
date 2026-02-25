@@ -22,35 +22,32 @@ public class Task {
         completed = new SimpleBooleanProperty(false);
     }
 
-    public void setTask(String task) {
-        this.task = task;
+    public String getTask() {
+        return task;
     }
 
-    public String getTask() { return task; }
-
-    public void setDate(LocalDate date) {
-        this.date = date;
+    public void setTask(String task) {
+        this.task = task;
     }
 
     public LocalDate getDate() {
         return date;
     }
 
+    public void setDate(LocalDate date) {
+        this.date = date;
+    }
+
     public BooleanProperty completedProperty() {
         return completed;
     }
 
-    /*
-    public boolean isCompleted() {
-        return completed.get();
+    public String serialize() {
+        return task + " - " + date + " - " + completed.get();
     }
 
-    public void setCompleted(boolean value) {
-        completed.set(value);
-    }
-    */
-
+    @Override
     public String toString() {
-        return task + (date == null? "" : " - " + date);
+        return task + " - " +  date;
     }
 }

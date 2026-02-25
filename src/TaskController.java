@@ -16,16 +16,14 @@ public class TaskController {
     private Stage stage;
 
     private ObservableList<Task> tasks;
-    private BackupStack backups;
-    private BackupStack redo;
+    private UndoManager undoManager;
 
     @FXML
     private void delete() {
-        backups.push(new Action(
+        undoManager.push(new Action(
                 () -> tasks.add(task),
                 () -> tasks.remove(task)
         ));
-        redo.clear();
         tasks.remove(task);
         stage.close();
     }
@@ -36,7 +34,7 @@ public class TaskController {
         String newText = taskDescription.getText();
         LocalDate oldDate = task.getDate();
         LocalDate newDate = date.getValue();
-        backups.push(new Action(
+        undoManager.push(new Action(
                 () -> {
                     task.setTask(oldText);
                     task.setDate(oldDate);
@@ -46,7 +44,6 @@ public class TaskController {
                     task.setDate(newDate);
                 }
         ));
-        redo.clear();
         task.setTask(newText);
         task.setDate(newDate);
         stage.close();
@@ -84,18 +81,10 @@ public class TaskController {
     }
 
     /**
-     * Set backup stack to push
-     * @param backups to push
+     * Set undo manager for undo / redo
+     * @param undoManager for undo / redo
      */
-    public void setBackups(BackupStack backups) {
-        this.backups = backups;
-    }
-
-    /**
-     * Set redo stack to push
-     * @param redo to push
-     */
-    public void setRedo(BackupStack redo) {
-        this.redo = redo;
+    public void setUndoManager(UndoManager undoManager) {
+        this.undoManager = undoManager;
     }
 }
