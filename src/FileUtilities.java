@@ -20,7 +20,7 @@ public class FileUtilities {
                         try {
                             String taskText = parts[0].trim();
                             LocalDate taskDate = LocalDate.parse(parts[1].trim());
-                             boolean completed = Boolean.parseBoolean(parts[2].trim());
+                            boolean completed = Boolean.parseBoolean(parts[2].trim());
                             Task task = new Task(taskText, taskDate);
                             task.completedProperty().set(completed);
                             tasks.add(task);
