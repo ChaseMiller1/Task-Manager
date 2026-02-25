@@ -1,3 +1,5 @@
+import javafx.scene.control.Alert;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
@@ -24,8 +26,7 @@ public class UserFile {
                 writer.print("");
             }
         } catch (FileNotFoundException e) {
-            throw new RuntimeException(
-                    "File not found, current list couldn't be saved");
+            new Alert(Alert.AlertType.ERROR, "Issue saving previous file").showAndWait();
         }
     }
 
